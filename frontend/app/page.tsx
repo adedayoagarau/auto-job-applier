@@ -121,9 +121,11 @@ export default function Dashboard() {
     try {
       const response = await fetch('/api/applications?limit=50')
       const data = await response.json()
-      setApplications(data)
+      // Ensure data is an array before setting
+      setApplications(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Failed to load applications:', error)
+      setApplications([]) // Set to empty array on error
     }
   }
 
@@ -365,7 +367,7 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {applications.length === 0 ? (
+                    {!applications || applications.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No applications yet</p>
                     ) : (
                       applications.map((app) => (
