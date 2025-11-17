@@ -1,8 +1,63 @@
 # AutoJobApplier - Web Interface
 
-Welcome to the web-based version of AutoJobApplier! This document explains how to use the web interface for automated job applications.
+Welcome to the web-based version of AutoJobApplier! This document explains how to use the web interfaces for automated job applications.
 
-## 🚀 Quick Start
+## 🎨 Two Web Interfaces Available
+
+AutoJobApplier offers **two web interface options**:
+
+### 1. **Modern Next.js Dashboard** (Recommended)
+- ✨ Beautiful, modern UI with shadcn/ui components
+- 🌓 Full dark mode support with theme toggle
+- 📱 Fully responsive design
+- 🚀 Built with Next.js 14, React 18, and TypeScript
+- ⚡ Superior performance and user experience
+
+**Start with:**
+```bash
+./start-fullstack.sh    # Linux/Mac
+start-fullstack.bat     # Windows
+```
+Access at: **http://localhost:3000**
+
+### 2. **Legacy Vanilla JS Interface**
+- 🔧 Simple, lightweight setup
+- 📦 No Node.js required
+- ✅ All features available
+- Perfect for quick testing or simple deployments
+
+**Start with:**
+```bash
+./start_web.sh          # Linux/Mac
+start_web.bat           # Windows
+```
+Access at: **http://localhost:8000**
+
+---
+
+## 🚀 Quick Start (Modern Next.js Interface)
+
+### Starting the Full Stack Application
+
+#### On Linux/Mac:
+```bash
+./start-fullstack.sh
+```
+
+#### On Windows:
+```bash
+start-fullstack.bat
+```
+
+This will start:
+- **Backend API** on http://localhost:8000
+- **Frontend Dashboard** on http://localhost:3000
+
+Open your browser to **http://localhost:3000** for the best experience!
+
+---
+
+## 🚀 Quick Start (Legacy Vanilla JS Interface)
 
 ### Starting the Web Server
 

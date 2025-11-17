@@ -18,46 +18,74 @@ Competitors like aiapply and Sonara AI charge premium prices. AutoJobApplier giv
 
 ## 🌐 Web Interface
 
-AutoJobApplier now includes a beautiful web-based interface! No command-line experience needed.
+AutoJobApplier features a **modern React/Next.js dashboard** with shadcn/ui components! No command-line experience needed.
 
-### Quick Start (Web Version)
+### 🚀 Quick Start (Full Stack Version)
 
 ```bash
 # Linux/Mac
-./start_web.sh
+./start-fullstack.sh
 
 # Windows
-start_web.bat
+start-fullstack.bat
 ```
 
-Then open your browser to **http://localhost:8000**
+This starts both:
+- **Backend API**: http://localhost:8000
+- **Frontend Dashboard**: http://localhost:3000
 
-### Web Features
-- 📊 Real-time dashboard with live statistics
-- 🔍 Interactive job search interface
-- 📝 Visual application history and tracking
-- ⚙️ Easy configuration management through the UI
-- 📤 Resume upload with automatic parsing
-- 🔄 Live activity feed with WebSocket updates
-- 📥 Export data to CSV with one click
+### ✨ Web Features
+- 🎨 **Modern UI** built with Next.js 14 + shadcn/ui
+- 🌓 **Dark Mode** with beautiful theme switching
+- 📊 **Real-time dashboard** with live statistics
+- 🔍 **Interactive job search** interface
+- 📝 **Visual application tracking** with filters
+- ⚙️ **Configuration management** through the UI
+- 📤 **Resume upload** with automatic parsing
+- 🔄 **Live WebSocket updates** for real-time feedback
+- 📥 **Export data** to CSV with one click
+- 📱 **Responsive design** - works on all devices
 
-See [WEB_INTERFACE.md](WEB_INTERFACE.md) for detailed documentation.
+### Legacy Web Interface (Vanilla JS)
+
+For a simpler setup, use the vanilla JavaScript interface:
+```bash
+./start_web.sh    # Backend + static frontend at :8000
+```
+
+See [WEB_INTERFACE.md](WEB_INTERFACE.md) and [frontend/README.md](frontend/README.md) for detailed documentation.
 
 ## 🛠️ Tech Stack
 
+### Backend
 - **Python 3.9+**
+- **FastAPI**: Modern async web framework
 - **Playwright**: Browser automation
 - **Claude API**: Intelligent form understanding and filling
-- **SQLite**: Application tracking database
+- **SQLite + SQLAlchemy**: Application tracking database
 - **Beautiful Soup**: HTML parsing
-- **FastAPI**: Modern web framework for the web interface
-- **WebSockets**: Real-time updates in the web UI
+- **WebSockets**: Real-time updates
+
+### Frontend
+- **Next.js 14**: React framework with App Router
+- **React 18**: UI library
+- **TypeScript**: Type-safe development
+- **shadcn/ui**: Beautiful, accessible component system
+- **Tailwind CSS**: Utility-first CSS framework
+- **Radix UI**: Headless UI primitives
+- **Lucide Icons**: Beautiful icon set
+- **next-themes**: Dark mode support
 
 ## 📋 Prerequisites
 
+### For Backend & CLI
 - Python 3.9 or higher
 - Claude API key (from Anthropic)
 - Your resume/CV in PDF or DOCX format
+
+### For Frontend (Optional, for web UI)
+- Node.js 18+ and npm
+- Modern web browser
 
 ## 🚀 Quick Start
 
