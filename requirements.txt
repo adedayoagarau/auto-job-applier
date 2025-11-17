@@ -1,0 +1,32 @@
+# Core dependencies
+anthropic>=0.39.0
+playwright>=1.40.0
+python-dotenv>=1.0.0
+
+# Web scraping and parsing
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+requests>=2.31.0
+
+# PDF and document parsing
+PyPDF2>=3.0.0
+python-docx>=1.1.0
+pdfplumber>=0.10.0
+
+# Database
+sqlalchemy>=2.0.0
+
+# Utilities
+python-dateutil>=2.8.0
+tqdm>=4.66.0
+colorama>=0.4.6
+
+# Logging and monitoring
+loguru>=0.7.0
+
+# Rate limiting
+ratelimit>=2.2.1
+
+# Optional: Web interface
+fastapi>=0.104.0
+uvicorn>=0.24.0
