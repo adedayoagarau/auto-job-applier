@@ -34,17 +34,24 @@ export default function Dashboard() {
   const [applications, setApplications] = useState<any[]>([])
   const [config, setConfig] = useState<any>(null)
   const [ws, setWs] = useState<WebSocket | null>(null)
+  const reconnectTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
 
   // Load stats on mount
   useEffect(() => {
     loadStatistics()
     loadApplications()
     loadConfig()
-    setupWebSocket()
+
+    const websocket = setupWebSocket()
 
     return () => {
-      if (ws) {
-        ws.close()
+      // Clear any pending reconnection attempts
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+      }
+      // Close the websocket
+      if (websocket) {
+        websocket.close()
       }
     }
   }, [])
@@ -56,6 +63,7 @@ export default function Dashboard() {
     const websocket = new WebSocket(wsUrl)
 
     websocket.onopen = () => {
+      console.log('WebSocket connected')
       addActivityLog("Connected to server", "success")
     }
 
@@ -64,13 +72,23 @@ export default function Dashboard() {
       handleWebSocketMessage(message)
     }
 
+    websocket.onerror = (error) => {
+      console.error('WebSocket error:', error)
+    }
+
     websocket.onclose = () => {
+      console.log('WebSocket disconnected')
       addActivityLog("Disconnected from server", "warning")
-      // Attempt to reconnect after 3 seconds
-      setTimeout(setupWebSocket, 3000)
+
+      // Attempt to reconnect after 3 seconds (only if not manually closed)
+      reconnectTimeoutRef.current = setTimeout(() => {
+        const newWebsocket = setupWebSocket()
+        setWs(newWebsocket)
+      }, 3000)
     }
 
     setWs(websocket)
+    return websocket
   }
 
   const handleWebSocketMessage = (message: any) => {

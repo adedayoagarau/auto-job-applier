@@ -53,25 +53,33 @@ class JobScraper:
         if self.playwright:
             self.playwright.stop()
     
-    def search_jobs(self, platform: str, job_title: str, location: str) -> List[Dict]:
+    def search_jobs(self, job_title: str, location: str, platforms: List[str] = None) -> List[Dict]:
         """
-        Search for jobs on a specific platform
-        
+        Search for jobs across multiple platforms
+
         Args:
-            platform: Platform name (indeed, linkedin, etc.)
             job_title: Job title to search for
             location: Location to search in
-            
+            platforms: List of platform names (indeed, linkedin, etc.). If None, uses all platforms.
+
         Returns:
             List of job dictionaries
         """
-        if platform.lower() == 'indeed':
-            return self._search_indeed(job_title, location)
-        elif platform.lower() == 'linkedin':
-            return self._search_linkedin(job_title, location)
-        else:
-            logger.warning(f"Platform {platform} not supported yet")
-            return []
+        if platforms is None:
+            platforms = ['indeed']  # Default to Indeed
+
+        all_jobs = []
+        for platform in platforms:
+            if platform.lower() == 'indeed':
+                jobs = self._search_indeed(job_title, location)
+                all_jobs.extend(jobs)
+            elif platform.lower() == 'linkedin':
+                jobs = self._search_linkedin(job_title, location)
+                all_jobs.extend(jobs)
+            else:
+                logger.warning(f"Platform {platform} not supported yet")
+
+        return all_jobs
     
     def _search_indeed(self, job_title: str, location: str) -> List[Dict]:
         """Search Indeed for jobs"""

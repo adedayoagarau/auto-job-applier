@@ -31,7 +31,7 @@ class Application(Base):
     platform = Column(String)
     
     # Application details
-    applied_date = Column(DateTime, default=datetime.now)
+    applied_at = Column(DateTime, default=datetime.now)
     status = Column(String, default='pending')  # pending, submitted, rejected, interview, offer
     
     # Job details
@@ -162,7 +162,7 @@ class ApplicationTracker:
         """Get count of applications submitted today"""
         today = datetime.now().date()
         count = self.session.query(Application).filter(
-            Application.applied_date >= today
+            Application.applied_at >= today
         ).count()
         return count
     
@@ -258,7 +258,7 @@ class ApplicationTracker:
                 # Data
                 for app in applications:
                     writer.writerow([
-                        app.applied_date.strftime('%Y-%m-%d'),
+                        app.applied_at.strftime('%Y-%m-%d') if app.applied_at else 'N/A',
                         app.job_title,
                         app.company,
                         app.location,
