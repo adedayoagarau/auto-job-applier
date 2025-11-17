@@ -14,6 +14,34 @@ Competitors like aiapply and Sonara AI charge premium prices. AutoJobApplier giv
 - **Application Tracking**: Keeps track of all applications in a local database
 - **Resume Parsing**: Extracts information from your CV to fill forms accurately
 - **Customizable**: Configure which platforms, job titles, and criteria to use
+- **🌐 Web Interface**: Modern web-based UI with real-time updates (NEW!)
+
+## 🌐 Web Interface
+
+AutoJobApplier now includes a beautiful web-based interface! No command-line experience needed.
+
+### Quick Start (Web Version)
+
+```bash
+# Linux/Mac
+./start_web.sh
+
+# Windows
+start_web.bat
+```
+
+Then open your browser to **http://localhost:8000**
+
+### Web Features
+- 📊 Real-time dashboard with live statistics
+- 🔍 Interactive job search interface
+- 📝 Visual application history and tracking
+- ⚙️ Easy configuration management through the UI
+- 📤 Resume upload with automatic parsing
+- 🔄 Live activity feed with WebSocket updates
+- 📥 Export data to CSV with one click
+
+See [WEB_INTERFACE.md](WEB_INTERFACE.md) for detailed documentation.
 
 ## 🛠️ Tech Stack
 
@@ -22,6 +50,8 @@ Competitors like aiapply and Sonara AI charge premium prices. AutoJobApplier giv
 - **Claude API**: Intelligent form understanding and filling
 - **SQLite**: Application tracking database
 - **Beautiful Soup**: HTML parsing
+- **FastAPI**: Modern web framework for the web interface
+- **WebSockets**: Real-time updates in the web UI
 
 ## 📋 Prerequisites
 
@@ -169,10 +199,10 @@ python main.py --export applications.csv
 ## 📈 Roadmap
 
 - [ ] Support for more job platforms
-- [ ] Cover letter generation
+- [x] Cover letter generation (AI-powered)
 - [ ] Interview scheduling assistance
 - [ ] Chrome extension for easy job saving
-- [ ] Web dashboard for tracking
+- [x] Web dashboard for tracking
 - [ ] Email notification system
 
 ## 🤝 Contributing

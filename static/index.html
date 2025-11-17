@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoJobApplier - Automated Job Application System</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🤖 AutoJobApplier</h1>
+            <p class="subtitle">AI-Powered Automated Job Application System</p>
+            <div class="connection-status">
+                <span id="connectionStatus" class="status-dot"></span>
+                <span id="connectionText">Connecting...</span>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="tabs">
+            <button class="tab-button active" data-tab="dashboard">Dashboard</button>
+            <button class="tab-button" data-tab="search">Job Search</button>
+            <button class="tab-button" data-tab="applications">Applications</button>
+            <button class="tab-button" data-tab="config">Configuration</button>
+        </nav>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tab-content active">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Applications</h3>
+                    <p class="stat-value" id="totalApplications">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Today's Applications</h3>
+                    <p class="stat-value" id="todayApplications">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Success Rate</h3>
+                    <p class="stat-value" id="successRate">0%</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Avg. Match Score</h3>
+                    <p class="stat-value" id="avgMatchScore">0</p>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button id="startSearch" class="btn btn-primary">🔍 Search Jobs</button>
+                <button id="startApply" class="btn btn-success">✉️ Start Applying</button>
+                <button id="stopProcess" class="btn btn-danger" style="display:none;">⏹️ Stop Process</button>
+                <button id="exportData" class="btn btn-secondary">📥 Export Data</button>
+            </div>
+
+            <!-- Activity Log -->
+            <div class="activity-section">
+                <h2>Activity Log</h2>
+                <div id="activityLog" class="activity-log"></div>
+            </div>
+        </div>
+
+        <!-- Search Tab -->
+        <div id="search" class="tab-content">
+            <h2>Job Search</h2>
+            <form id="searchForm" class="form">
+                <div class="form-group">
+                    <label>Job Titles (comma-separated)</label>
+                    <input type="text" id="jobTitles" placeholder="e.g., Software Engineer, Full Stack Developer" required>
+                </div>
+                <div class="form-group">
+                    <label>Locations (comma-separated)</label>
+                    <input type="text" id="locations" placeholder="e.g., New York, Remote, San Francisco" required>
+                </div>
+                <div class="form-group">
+                    <label>Platforms</label>
+                    <div class="checkbox-group">
+                        <label><input type="checkbox" name="platform" value="indeed" checked> Indeed</label>
+                        <label><input type="checkbox" name="platform" value="linkedin"> LinkedIn</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Include Keywords (comma-separated, optional)</label>
+                    <input type="text" id="includeKeywords" placeholder="e.g., Python, React, AWS">
+                </div>
+                <div class="form-group">
+                    <label>Exclude Keywords (comma-separated, optional)</label>
+                    <input type="text" id="excludeKeywords" placeholder="e.g., Senior, Manager">
+                </div>
+                <button type="submit" class="btn btn-primary">Search Jobs</button>
+            </form>
+
+            <!-- Search Results -->
+            <div id="searchResults" class="search-results" style="display:none;">
+                <h3>Found Jobs</h3>
+                <div id="jobsList" class="jobs-list"></div>
+            </div>
+        </div>
+
+        <!-- Applications Tab -->
+        <div id="applications" class="tab-content">
+            <h2>Application History</h2>
+            <div class="filter-bar">
+                <select id="statusFilter" class="filter-select">
+                    <option value="">All Statuses</option>
+                    <option value="applied">Applied</option>
+                    <option value="pending">Pending</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="interview">Interview</option>
+                </select>
+                <button id="refreshApplications" class="btn btn-secondary">🔄 Refresh</button>
+            </div>
+            <div id="applicationsList" class="applications-list"></div>
+        </div>
+
+        <!-- Configuration Tab -->
+        <div id="config" class="tab-content">
+            <h2>Configuration</h2>
+            <form id="configForm" class="form">
+                <div class="form-section">
+                    <h3>Personal Information</h3>
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" id="fullName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Phone</label>
+                        <input type="tel" id="phone" required>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Application Settings</h3>
+                    <div class="form-group">
+                        <label>Max Applications Per Day</label>
+                        <input type="number" id="maxApplications" min="1" max="100" value="20">
+                    </div>
+                    <div class="form-group">
+                        <label>Application Delay (seconds)</label>
+                        <input type="number" id="applicationDelay" min="10" max="300" value="30">
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="autoSubmit">
+                            Auto-submit applications (no manual approval)
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="headless">
+                            Run browser in headless mode
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Resume Upload</h3>
+                    <div class="form-group">
+                        <label>Upload Resume (PDF or DOCX)</label>
+                        <input type="file" id="resumeUpload" accept=".pdf,.docx">
+                        <button type="button" id="uploadResumeBtn" class="btn btn-secondary">Upload</button>
+                    </div>
+                    <div id="resumeStatus" class="info-message"></div>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Save Configuration</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
