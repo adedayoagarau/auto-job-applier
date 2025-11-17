@@ -358,7 +358,7 @@ async def run_job_search(
             "platforms": platforms
         })
 
-        scraper = JobScraper(headless=config.HEADLESS)
+        scraper = JobScraper()
         tracker = ApplicationTracker()
 
         all_jobs = []
@@ -426,9 +426,9 @@ async def run_application_process(
 
         # Initialize components
         tracker = ApplicationTracker()
-        scraper = JobScraper(headless=config.HEADLESS)
+        scraper = JobScraper()
         ai_assistant = AIAssistant(api_key=config.ANTHROPIC_API_KEY)
-        form_filler = FormFiller(headless=config.HEADLESS)
+        # Note: FormFiller requires page object from scraper context
 
         # Parse CV
         cv_parser = CVParser(config.RESUME_PATH)
