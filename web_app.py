@@ -641,12 +641,12 @@ async def update_config(
 
 @app.get("/api/statistics")
 async def get_statistics(current_user: TokenData = Depends(get_current_user)):
-    """Get application statistics"""
+    """Get application statistics for current user"""
     try:
         # Run in thread pool to avoid blocking event loop
         def _get_stats():
             tracker = ApplicationTracker()
-            return tracker.get_statistics()
+            return tracker.get_statistics(user_id=current_user.user_id)
 
         stats = await asyncio.to_thread(_get_stats)
         return stats
@@ -660,18 +660,25 @@ async def get_applications(
     offset: int = 0,
     current_user: TokenData = Depends(get_current_user)
 ):
-    """Get list of applications"""
+    """Get list of applications for current user"""
     try:
         # Run in thread pool to avoid blocking event loop
         def _get_applications():
             tracker = ApplicationTracker()
             # Get applications from database
             from src.application_tracker import Application
-            from sqlalchemy import desc
+            from sqlalchemy import desc, or_
 
             session = tracker.Session()
             try:
+                # Filter by user_id OR applications without user_id (legacy data)
                 applications = session.query(Application)\
+                    .filter(
+                        or_(
+                            Application.user_id == current_user.user_id,
+                            Application.user_id == None  # Include legacy applications
+                        )
+                    )\
                     .order_by(desc(Application.applied_at))\
                     .limit(limit)\
                     .offset(offset)\

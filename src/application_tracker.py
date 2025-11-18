@@ -2,9 +2,9 @@
 Application Tracker module for tracking job applications in a database
 """
 
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Text, Float
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Text, Float, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 from typing import List, Dict, Optional
 from loguru import logger
@@ -22,8 +22,9 @@ Base = declarative_base()
 class Application(Base):
     """Application model for database"""
     __tablename__ = 'applications'
-    
+
     id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)  # Nullable for backward compatibility
     job_url = Column(String, unique=True, nullable=False)
     job_title = Column(String, nullable=False)
     company = Column(String, nullable=False)
@@ -158,13 +159,24 @@ class ApplicationTracker:
         app = self.get_application(job_url)
         return app is not None
     
-    def get_applications_today(self) -> int:
-        """Get count of applications submitted today"""
+    def get_applications_today(self, user_id: Optional[int] = None) -> int:
+        """Get count of applications submitted today for a specific user"""
+        from sqlalchemy import or_
+
         today = datetime.now().date()
-        count = self.session.query(Application).filter(
+        query = self.session.query(Application).filter(
             Application.applied_at >= today
-        ).count()
-        return count
+        )
+
+        if user_id:
+            query = query.filter(
+                or_(
+                    Application.user_id == user_id,
+                    Application.user_id == None  # Include legacy applications
+                )
+            )
+
+        return query.count()
     
     def get_all_applications(self, status: str = None, 
                            limit: int = None) -> List[Application]:
@@ -190,42 +202,60 @@ class ApplicationTracker:
         
         return query.all()
     
-    def get_statistics(self) -> Dict:
+    def get_statistics(self, user_id: Optional[int] = None) -> Dict:
         """
-        Get application statistics
-        
+        Get application statistics for a specific user
+
+        Args:
+            user_id: Optional user ID to filter by
+
         Returns:
             Dictionary with statistics
         """
-        total = self.session.query(Application).count()
-        submitted = self.session.query(Application).filter_by(submitted=True).count()
-        pending = self.session.query(Application).filter_by(status='pending').count()
-        interviews = self.session.query(Application).filter_by(status='interview').count()
-        offers = self.session.query(Application).filter_by(status='offer').count()
-        rejected = self.session.query(Application).filter_by(status='rejected').count()
-        
+        from sqlalchemy import or_
+
+        # Build base query with user filter
+        base_query = self.session.query(Application)
+        if user_id:
+            base_query = base_query.filter(
+                or_(
+                    Application.user_id == user_id,
+                    Application.user_id == None  # Include legacy applications
+                )
+            )
+
+        total = base_query.count()
+        submitted = base_query.filter_by(submitted=True).count()
+        pending = base_query.filter_by(status='pending').count()
+        interviews = base_query.filter_by(status='interview').count()
+        offers = base_query.filter_by(status='offer').count()
+        rejected = base_query.filter_by(status='rejected').count()
+
         # Today's applications
-        today_count = self.get_applications_today()
-        
+        today_count = self.get_applications_today(user_id=user_id)
+
         # Average match score
-        avg_score = self.session.query(Application).with_entities(
+        avg_score = base_query.with_entities(
             Application.match_score
         ).filter(Application.match_score > 0).all()
-        
+
         if avg_score:
             avg_match = sum(s[0] for s in avg_score) / len(avg_score)
         else:
             avg_match = 0
-        
+
+        success_rate = (submitted / total * 100) if total > 0 else 0
+
         return {
-            'total': total,
+            'total_applications': total,
+            'applications_today': today_count,
+            'success_rate': round(success_rate, 2),
+            'average_match_score': round(avg_match, 2),
             'submitted': submitted,
             'pending': pending,
             'interviews': interviews,
             'offers': offers,
             'rejected': rejected,
-            'today': today_count,
-            'average_match_score': round(avg_match, 2)
         }
     
     def export_to_csv(self, filename: str = 'applications.csv') -> str:
