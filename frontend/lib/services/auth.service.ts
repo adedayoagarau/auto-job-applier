@@ -4,6 +4,7 @@
  */
 
 import { User, LoginCredentials, RegisterData, AuthToken } from '@/lib/types/auth'
+import { fetchWithRetry } from '@/lib/utils/retry'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -153,7 +154,7 @@ class AuthService {
   }
 
   /**
-   * Make authenticated API request
+   * Make authenticated API request with retry logic
    */
   async fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
     const token = this.getToken()
@@ -167,10 +168,19 @@ class AuthService {
       'Authorization': `Bearer ${token}`,
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    })
+    const response = await fetchWithRetry(
+      url,
+      {
+        ...options,
+        headers,
+      },
+      {
+        maxRetries: 3,
+        onRetry: (attempt, error) => {
+          console.log(`Retry attempt ${attempt} for ${url}:`, error.message)
+        },
+      }
+    )
 
     // If unauthorized, clear token and throw
     if (response.status === 401 || response.status === 403) {

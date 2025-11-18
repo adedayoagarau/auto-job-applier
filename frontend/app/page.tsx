@@ -23,21 +23,27 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { ProtectedRoute } from "@/components/auth/protected-route"
 import { UserNav } from "@/components/auth/user-nav"
 import { authService } from "@/lib/services/auth.service"
+import { LoadingSpinner, LoadingOverlay } from "@/components/ui/loading-spinner"
+import { ApplicationListSkeleton } from "@/components/ui/application-skeleton"
+import { Application, Statistics, Config, ActivityLogEntry, WebSocketMessage } from "@/lib/types/api"
 
 function DashboardContent() {
   const [currentView, setCurrentView] = useState<"dashboard" | "search" | "applications" | "config">("dashboard")
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<Statistics>({
     total_applications: 0,
     applications_today: 0,
     success_rate: 0,
     average_match_score: 0
   })
-  const [activityLog, setActivityLog] = useState<Array<{time: string, message: string, type: string}>>([])
+  const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
-  const [applications, setApplications] = useState<any[]>([])
-  const [config, setConfig] = useState<any>(null)
+  const [applications, setApplications] = useState<Application[]>([])
+  const [config, setConfig] = useState<Config | null>(null)
   const [ws, setWs] = useState<WebSocket | null>(null)
   const reconnectTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
+  const [isLoadingStats, setIsLoadingStats] = useState(true)
+  const [isLoadingApps, setIsLoadingApps] = useState(true)
+  const [isLoadingConfig, setIsLoadingConfig] = useState(true)
 
   // Load stats on mount
   useEffect(() => {
@@ -94,7 +100,7 @@ function DashboardContent() {
     return websocket
   }
 
-  const handleWebSocketMessage = (message: any) => {
+  const handleWebSocketMessage = (message: WebSocketMessage) => {
     const { type, data } = message
 
     switch (type) {
@@ -130,37 +136,46 @@ function DashboardContent() {
 
   const loadStatistics = async () => {
     try {
+      setIsLoadingStats(true)
       const response = await authService.fetchWithAuth('/api/statistics')
-      const data = await response.json()
+      const data: Statistics = await response.json()
       setStats(data)
     } catch (error) {
       console.error('Failed to load statistics:', error)
+    } finally {
+      setIsLoadingStats(false)
     }
   }
 
   const loadApplications = async () => {
     try {
+      setIsLoadingApps(true)
       const response = await authService.fetchWithAuth('/api/applications?limit=50')
-      const data = await response.json()
+      const data: Application[] = await response.json()
       // Ensure data is an array before setting
       setApplications(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Failed to load applications:', error)
       setApplications([]) // Set to empty array on error
+    } finally {
+      setIsLoadingApps(false)
     }
   }
 
   const loadConfig = async () => {
     try {
+      setIsLoadingConfig(true)
       const response = await authService.fetchWithAuth('/api/config')
-      const data = await response.json()
+      const data: Config = await response.json()
       setConfig(data)
     } catch (error) {
       console.error('Failed to load config:', error)
+    } finally {
+      setIsLoadingConfig(false)
     }
   }
 
-  const addActivityLog = (message: string, type: string) => {
+  const addActivityLog = (message: string, type: 'info' | 'success' | 'warning' | 'error') => {
     const time = new Date().toLocaleTimeString()
     setActivityLog(prev => [{ time, message, type }, ...prev].slice(0, 50))
   }
@@ -388,35 +403,39 @@ function DashboardContent() {
                   <CardDescription>All your submitted applications</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {!applications || applications.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No applications yet</p>
-                    ) : (
-                      applications.map((app) => (
-                        <div key={app.id} className="flex items-center justify-between border-b pb-4 last:border-0">
-                          <div className="space-y-1">
-                            <h4 className="text-sm font-semibold">{app.job_title}</h4>
-                            <p className="text-sm text-muted-foreground">{app.company} • {app.location}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Applied: {app.applied_at ? new Date(app.applied_at).toLocaleDateString() : 'N/A'}
-                            </p>
+                  {isLoadingApps ? (
+                    <ApplicationListSkeleton count={5} />
+                  ) : (
+                    <div className="space-y-4">
+                      {!applications || applications.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No applications yet</p>
+                      ) : (
+                        applications.map((app) => (
+                          <div key={app.id} className="flex items-center justify-between border-b pb-4 last:border-0">
+                            <div className="space-y-1">
+                              <h4 className="text-sm font-semibold">{app.job_title}</h4>
+                              <p className="text-sm text-muted-foreground">{app.company} • {app.location}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Applied: {app.applied_at ? new Date(app.applied_at).toLocaleDateString() : 'N/A'}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {app.match_score && (
+                                <Badge variant="secondary">{app.match_score}/100</Badge>
+                              )}
+                              <Badge variant={
+                                app.status === 'applied' ? 'default' :
+                                app.status === 'interview' ? 'default' :
+                                app.status === 'rejected' ? 'destructive' : 'secondary'
+                              }>
+                                {app.status}
+                              </Badge>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {app.match_score && (
-                              <Badge variant="secondary">{app.match_score}/100</Badge>
-                            )}
-                            <Badge variant={
-                              app.status === 'applied' ? 'default' :
-                              app.status === 'interview' ? 'default' :
-                              app.status === 'rejected' ? 'destructive' : 'secondary'
-                            }>
-                              {app.status}
-                            </Badge>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </>
