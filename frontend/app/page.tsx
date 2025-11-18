@@ -20,8 +20,11 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { ProtectedRoute } from "@/components/auth/protected-route"
+import { UserNav } from "@/components/auth/user-nav"
+import { authService } from "@/lib/services/auth.service"
 
-export default function Dashboard() {
+function DashboardContent() {
   const [currentView, setCurrentView] = useState<"dashboard" | "search" | "applications" | "config">("dashboard")
   const [stats, setStats] = useState({
     total_applications: 0,
@@ -127,7 +130,7 @@ export default function Dashboard() {
 
   const loadStatistics = async () => {
     try {
-      const response = await fetch('/api/statistics')
+      const response = await authService.fetchWithAuth('/api/statistics')
       const data = await response.json()
       setStats(data)
     } catch (error) {
@@ -137,7 +140,7 @@ export default function Dashboard() {
 
   const loadApplications = async () => {
     try {
-      const response = await fetch('/api/applications?limit=50')
+      const response = await authService.fetchWithAuth('/api/applications?limit=50')
       const data = await response.json()
       // Ensure data is an array before setting
       setApplications(Array.isArray(data) ? data : [])
@@ -149,7 +152,7 @@ export default function Dashboard() {
 
   const loadConfig = async () => {
     try {
-      const response = await fetch('/api/config')
+      const response = await authService.fetchWithAuth('/api/config')
       const data = await response.json()
       setConfig(data)
     } catch (error) {
@@ -164,7 +167,7 @@ export default function Dashboard() {
 
   const startSearch = async () => {
     try {
-      await fetch('/api/search', {
+      await authService.fetchWithAuth('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -181,7 +184,7 @@ export default function Dashboard() {
 
   const startApply = async () => {
     try {
-      await fetch('/api/apply', {
+      await authService.fetchWithAuth('/api/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -198,7 +201,7 @@ export default function Dashboard() {
 
   const stopProcess = async () => {
     try {
-      await fetch('/api/stop', { method: 'POST' })
+      await authService.fetchWithAuth('/api/stop', { method: 'POST' })
       setIsProcessing(false)
       addActivityLog('Stop signal sent', 'warning')
     } catch (error) {
@@ -216,8 +219,9 @@ export default function Dashboard() {
       {/* Sidebar */}
       <aside className="w-64 border-r bg-card">
         <div className="flex h-full flex-col">
-          <div className="flex h-16 items-center border-b px-6">
+          <div className="flex h-16 items-center justify-between border-b px-6">
             <h1 className="text-xl font-bold">AutoJobApplier</h1>
+            <UserNav />
           </div>
           <nav className="flex-1 space-y-1 p-4">
             <Button
@@ -530,5 +534,13 @@ export default function Dashboard() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function Dashboard() {
+  return (
+    <ProtectedRoute>
+      <DashboardContent />
+    </ProtectedRoute>
   )
 }
