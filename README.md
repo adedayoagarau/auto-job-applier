@@ -224,6 +224,34 @@ python main.py --export applications.csv
 **Issue**: Rate limited by job board
 - Solution: Reduce `MAX_APPLICATIONS_PER_DAY` and add delays
 
+## 🔄 Continuous Improvement with Continuous Claude
+
+This project is configured to use **Continuous Claude** for autonomous, iterative code improvements. Continuous Claude runs Claude Code in a loop to tackle large, multi-step improvements while you sleep!
+
+### Quick Start
+
+```bash
+# Run general improvements (5 iterations)
+./scripts/continuous-improve.sh --max-runs 5
+
+# Add comprehensive unit tests
+./scripts/add-tests.sh
+
+# Security hardening
+./scripts/security-hardening.sh
+
+# Code quality improvements
+./scripts/code-quality.sh
+```
+
+See [CONTINUOUS_CLAUDE.md](CONTINUOUS_CLAUDE.md) for detailed documentation on:
+- Setting up Continuous Claude on your local machine
+- Running overnight improvement loops
+- Customizing tasks and priorities
+- Managing the `SHARED_TASK_NOTES.md` context file
+
+**Note**: Continuous Claude requires installation on your local machine (GitHub CLI + Continuous Claude CLI).
+
 ## 📈 Roadmap
 
 - [ ] Support for more job platforms
@@ -232,6 +260,7 @@ python main.py --export applications.csv
 - [ ] Chrome extension for easy job saving
 - [x] Web dashboard for tracking
 - [ ] Email notification system
+- [x] Continuous improvement automation
 
 ## 🤝 Contributing
 
