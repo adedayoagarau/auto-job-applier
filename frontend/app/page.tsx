@@ -10,7 +10,9 @@ import {
   Play,
   Square,
   Download,
-  Upload
+  Upload,
+  Filter,
+  X
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -19,15 +21,22 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { ProtectedRoute } from "@/components/auth/protected-route"
 import { UserNav } from "@/components/auth/user-nav"
+import { useAuth } from "@/lib/contexts/auth.context"
 import { authService } from "@/lib/services/auth.service"
 import { LoadingSpinner, LoadingOverlay } from "@/components/ui/loading-spinner"
 import { ApplicationListSkeleton } from "@/components/ui/application-skeleton"
 import { Application, Statistics, Config, ActivityLogEntry, WebSocketMessage } from "@/lib/types/api"
+import { Users } from "lucide-react"
+import { useRouter } from 'next/navigation'
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 function DashboardContent() {
+  const router = useRouter()
+  const { user } = useAuth()
   const [currentView, setCurrentView] = useState<"dashboard" | "search" | "applications" | "config">("dashboard")
   const [stats, setStats] = useState<Statistics>({
     total_applications: 0,
@@ -44,6 +53,68 @@ function DashboardContent() {
   const [isLoadingStats, setIsLoadingStats] = useState(true)
   const [isLoadingApps, setIsLoadingApps] = useState(true)
   const [isLoadingConfig, setIsLoadingConfig] = useState(true)
+
+  // Application filters and search
+  const [searchQuery, setSearchQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [platformFilter, setPlatformFilter] = useState<string>("all")
+
+  // Filtered applications based on search and filters
+  const filteredApplications = React.useMemo(() => {
+    return applications.filter(app => {
+      // Search filter
+      const matchesSearch = searchQuery === "" ||
+        app.job_title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        app.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        app.location?.toLowerCase().includes(searchQuery.toLowerCase())
+
+      // Status filter
+      const matchesStatus = statusFilter === "all" || app.status === statusFilter
+
+      // Platform filter
+      const matchesPlatform = platformFilter === "all" || app.platform === platformFilter
+
+      return matchesSearch && matchesStatus && matchesPlatform
+    })
+  }, [applications, searchQuery, statusFilter, platformFilter])
+
+  // Get unique platforms for filter dropdown
+  const availablePlatforms = React.useMemo(() => {
+    const platforms = new Set(applications.map(app => app.platform).filter(Boolean))
+    return Array.from(platforms).sort()
+  }, [applications])
+
+  // Chart data - Applications by status
+  const statusChartData = React.useMemo(() => {
+    const statusCounts: Record<string, number> = {}
+    applications.forEach(app => {
+      statusCounts[app.status] = (statusCounts[app.status] || 0) + 1
+    })
+    return Object.entries(statusCounts).map(([status, count]) => ({
+      name: status.charAt(0).toUpperCase() + status.slice(1),
+      value: count
+    }))
+  }, [applications])
+
+  // Chart data - Applications by platform
+  const platformChartData = React.useMemo(() => {
+    const platformCounts: Record<string, number> = {}
+    applications.forEach(app => {
+      if (app.platform) {
+        platformCounts[app.platform] = (platformCounts[app.platform] || 0) + 1
+      }
+    })
+    return Object.entries(platformCounts)
+      .map(([platform, count]) => ({
+        name: platform,
+        applications: count
+      }))
+      .sort((a, b) => b.applications - a.applications)
+      .slice(0, 8) // Top 8 platforms
+  }, [applications])
+
+  // Colors for pie chart
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D']
 
   // Load stats on mount
   useEffect(() => {
@@ -271,6 +342,16 @@ function DashboardContent() {
               <Settings className="mr-2 h-4 w-4" />
               Configuration
             </Button>
+            {user?.is_admin && (
+              <Button
+                variant="ghost"
+                className="w-full justify-start"
+                onClick={() => router.push('/admin/users')}
+              >
+                <Users className="mr-2 h-4 w-4" />
+                Admin Users
+              </Button>
+            )}
           </nav>
           <div className="border-t p-4">
             <div className="flex items-center justify-between">
@@ -340,6 +421,65 @@ function DashboardContent() {
                 </Card>
               </div>
 
+              {/* Charts */}
+              {applications.length > 0 && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {/* Applications by Status - Pie Chart */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Applications by Status</CardTitle>
+                      <CardDescription>Distribution of application statuses</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={statusChartData}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                            outerRadius={80}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {statusChartData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Applications by Platform - Bar Chart */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Top Platforms</CardTitle>
+                      <CardDescription>Applications per platform</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={platformChartData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis
+                            dataKey="name"
+                            angle={-45}
+                            textAnchor="end"
+                            height={80}
+                            interval={0}
+                          />
+                          <YAxis />
+                          <Tooltip />
+                          <Bar dataKey="applications" fill="#8884d8" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="flex gap-4">
                 {!isProcessing ? (
@@ -397,20 +537,115 @@ function DashboardContent() {
                 <p className="text-muted-foreground">View and manage your job applications</p>
               </div>
 
+              {/* Search and Filters */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Filter className="h-5 w-5" />
+                    Search & Filters
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label>Search</Label>
+                      <div className="relative">
+                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by title, company, or location..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-8"
+                        />
+                        {searchQuery && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-1 top-1 h-7 w-7 p-0"
+                            onClick={() => setSearchQuery("")}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Status</Label>
+                      <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="All statuses" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All statuses</SelectItem>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="applied">Applied</SelectItem>
+                          <SelectItem value="interview">Interview</SelectItem>
+                          <SelectItem value="offer">Offer</SelectItem>
+                          <SelectItem value="rejected">Rejected</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Platform</Label>
+                      <Select value={platformFilter} onValueChange={setPlatformFilter}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="All platforms" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All platforms</SelectItem>
+                          {availablePlatforms.map(platform => (
+                            <SelectItem key={platform} value={platform}>
+                              {platform}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {(searchQuery || statusFilter !== "all" || platformFilter !== "all") && (
+                    <div className="mt-4 flex items-center gap-2">
+                      <Badge variant="secondary">
+                        {filteredApplications.length} of {applications.length} applications
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSearchQuery("")
+                          setStatusFilter("all")
+                          setPlatformFilter("all")
+                        }}
+                      >
+                        Clear filters
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
               <Card>
                 <CardHeader>
                   <CardTitle>Application History</CardTitle>
-                  <CardDescription>All your submitted applications</CardDescription>
+                  <CardDescription>
+                    {filteredApplications.length === 0 && applications.length > 0
+                      ? "No applications match your filters"
+                      : "All your submitted applications"}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {isLoadingApps ? (
                     <ApplicationListSkeleton count={5} />
                   ) : (
                     <div className="space-y-4">
-                      {!applications || applications.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No applications yet</p>
+                      {!filteredApplications || filteredApplications.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          {applications.length === 0 ? "No applications yet" : "No applications match your filters"}
+                        </p>
                       ) : (
-                        applications.map((app) => (
+                        filteredApplications.map((app) => (
                           <div key={app.id} className="flex items-center justify-between border-b pb-4 last:border-0">
                             <div className="space-y-1">
                               <h4 className="text-sm font-semibold">{app.job_title}</h4>
