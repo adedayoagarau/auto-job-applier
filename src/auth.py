@@ -144,80 +144,89 @@ async def get_current_user(
     return token_data
 
 
-# Simple in-memory user store (replace with database in production)
-class UserStore:
-    """Simple in-memory user storage (replace with database in production)"""
+# Import user service for database operations
+try:
+    from src.user_service import user_service
+    _user_service = user_service
+except ImportError:
+    # Fallback: Keep in-memory store for backwards compatibility
+    class UserStore:
+        """Simple in-memory user storage (fallback)"""
+        def __init__(self):
+            self.users = {}
+            self.user_id_counter = 1
+            self._create_default_user()
 
-    def __init__(self):
-        self.users = {}
-        self.user_id_counter = 1
-        # Create default admin user
-        self._create_default_user()
+        def _create_default_user(self):
+            default_email = "admin@autojobapplier.com"
+            default_password = "Admin123!"
+            if default_email not in self.users:
+                self.users[default_email] = {
+                    "id": self.user_id_counter,
+                    "email": default_email,
+                    "full_name": "Admin User",
+                    "hashed_password": get_password_hash(default_password),
+                    "is_active": True,
+                    "created_at": datetime.now()
+                }
+                self.user_id_counter += 1
 
-    def _create_default_user(self):
-        """Create a default admin user for testing"""
-        default_email = "admin@autojobapplier.com"
-        default_password = "Admin123!"
+        def get_user_by_email(self, email: str) -> Optional[dict]:
+            return self.users.get(email)
 
-        if default_email not in self.users:
-            self.users[default_email] = {
+        def create_user(self, email: str, password: str, full_name: Optional[str] = None) -> dict:
+            if email in self.users:
+                raise ValueError("User already exists")
+            user = {
                 "id": self.user_id_counter,
-                "email": default_email,
-                "full_name": "Admin User",
-                "hashed_password": get_password_hash(default_password),
+                "email": email,
+                "full_name": full_name,
+                "hashed_password": get_password_hash(password),
                 "is_active": True,
                 "created_at": datetime.now()
             }
+            self.users[email] = user
             self.user_id_counter += 1
+            return user
 
-    def get_user_by_email(self, email: str) -> Optional[dict]:
-        """Get user by email"""
-        return self.users.get(email)
+        def authenticate_user(self, email: str, password: str) -> Optional[dict]:
+            user = self.get_user_by_email(email)
+            if not user or not verify_password(password, user["hashed_password"]) or not user["is_active"]:
+                return None
+            return user
 
-    def create_user(self, email: str, password: str, full_name: Optional[str] = None) -> dict:
-        """Create a new user"""
-        if email in self.users:
-            raise ValueError("User already exists")
+    _user_service = UserStore()
 
-        user = {
-            "id": self.user_id_counter,
-            "email": email,
-            "full_name": full_name,
-            "hashed_password": get_password_hash(password),
-            "is_active": True,
-            "created_at": datetime.now()
-        }
 
-        self.users[email] = user
-        self.user_id_counter += 1
+def authenticate_user(email: str, password: str):
+    """
+    Authenticate a user by email and password
 
+    Returns:
+        User object (SQLAlchemy model or dict) if successful, None otherwise
+    """
+    user = _user_service.authenticate_user(email, password)
+    if user:
+        # Convert SQLAlchemy model to dict if needed
+        if hasattr(user, 'to_dict'):
+            return user.to_dict()
+        # For in-memory store, user is already a dict
         return user
-
-    def authenticate_user(self, email: str, password: str) -> Optional[dict]:
-        """Authenticate a user by email and password"""
-        user = self.get_user_by_email(email)
-
-        if not user:
-            return None
-
-        if not verify_password(password, user["hashed_password"]):
-            return None
-
-        if not user["is_active"]:
-            return None
-
-        return user
+    return None
 
 
-# Global user store instance
-user_store = UserStore()
+def create_user(email: str, password: str, full_name: Optional[str] = None):
+    """
+    Create a new user
 
+    Returns:
+        User object (SQLAlchemy model or dict)
 
-def authenticate_user(email: str, password: str) -> Optional[dict]:
-    """Authenticate a user"""
-    return user_store.authenticate_user(email, password)
-
-
-def create_user(email: str, password: str, full_name: Optional[str] = None) -> dict:
-    """Create a new user"""
-    return user_store.create_user(email, password, full_name)
+    Raises:
+        ValueError: If user already exists
+    """
+    user = _user_service.create_user(email, password, full_name)
+    # Convert SQLAlchemy model to dict if needed
+    if hasattr(user, 'to_dict'):
+        return user.to_dict()
+    return user
