@@ -22,7 +22,7 @@
    - WebSocket memory leak prevention
    - CORS security hardening
 ✅ Set up development environment with proper dependencies
-✅ **NEW: Comprehensive security and quality improvements** (Nov 18, 2025)
+✅ **Security and quality improvements** (Nov 18, 2025 - Session 1)
    - JWT authentication system with protected endpoints
    - Input validation on all API endpoints
    - File upload security (type checking, size limits, path traversal prevention)
@@ -31,6 +31,11 @@
    - Alembic database migration system
    - Unit test suite (21 tests, 95% passing)
    - Default admin user: admin@autojobapplier.com / Admin123!
+✅ **Additional improvements** (Nov 18, 2025 - Session 2)
+   - Rate limiting on all sensitive endpoints (slowapi)
+   - Environment variable management with validation
+   - .env.example template for configuration
+   - Centralized env_config module
 
 ## Priority Tasks (In Order)
 
@@ -42,20 +47,10 @@
 4. ✅ **Async/Sync Fixes** - Database operations in thread pool
 5. ✅ **Database Migrations** - Alembic setup with initial migration
 6. ✅ **Testing** - 21 unit/integration tests (auth, API endpoints)
+7. ✅ **Rate Limiting** - IP-based limits on sensitive endpoints (slowapi)
+8. ✅ **Environment Variables** - Centralized config, .env support, validation
 
 ### High Priority - Remaining
-
-7. **Rate Limiting**
-   - Prevent API abuse on sensitive endpoints
-   - Protect against DoS attacks
-   - Use slowapi or FastAPI-limiter
-   - Add per-user and per-IP rate limits
-
-8. **Environment Variables & Secrets Management**
-   - Move JWT secret key to environment variable
-   - Validate required environment variables on startup
-   - Create .env.example file
-   - Document configuration requirements
 
 9. **User Database Migration**
    - Move users from in-memory store to database
@@ -118,14 +113,26 @@
 ### Remaining
 
 - Web scraping selectors are hardcoded (brittle) - should use more robust selectors
-- No environment variable validation on startup - need to check required config
-- JWT secret key hardcoded in code - should be in environment variable
-- Users stored in memory - need database persistence
-- No rate limiting - API vulnerable to abuse
+- ~~No environment variable validation on startup~~ → Fixed with env_config module
+- ~~JWT secret key hardcoded in code~~ → Fixed, now from environment
+- ~~No rate limiting~~ → Fixed with slowapi on all sensitive endpoints
+- Users stored in memory - need database persistence (next priority)
 - Pydantic v1 validators deprecated - should migrate to v2 @field_validator
 
 ## Configuration Notes
 
+**Using .env file (recommended):**
+```bash
+# Copy template and configure
+cp .env.example .env
+
+# Edit .env with your values
+# Required:
+#   - JWT_SECRET_KEY (generate with: python -c "import secrets; print(secrets.token_urlsafe(32))")
+#   - ANTHROPIC_API_KEY (from Claude API dashboard)
+```
+
+**Alternative (legacy):**
 - **API Key**: Set `ANTHROPIC_API_KEY` in `config.py`
 - **Resume**: Place resume in `data/resumes/` directory
 - **Database**: Located at `data/applications.db` (auto-created)
@@ -139,11 +146,11 @@
 
 ## Next Iteration Guidance
 
-**Start with**: Rate limiting (item #7) - prevent API abuse
-**Then**: Environment variables (item #8) - move secrets out of code
-**Or**: User database migration (item #9) - persist users in database
+**Start with**: User database migration (item #9) - persist users in database
+**Then**: Frontend authentication integration (item #10) - login/register pages
+**Or**: Loading states (item #11) - better UX during operations
 
-**Focus**: Finish security hardening, then improve UX
+**Focus**: Complete core infrastructure, then improve UX
 
 **Testing**: After each change, verify:
 1. Run tests: `pytest` (should have 95%+ passing)
