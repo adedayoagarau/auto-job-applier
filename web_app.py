@@ -48,6 +48,7 @@ from src.auth import (
     TokenData,
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
+from src.user_service import user_service
 import config
 
 # Initialize rate limiter
@@ -161,6 +162,43 @@ class JobApplication(BaseModel):
     manual_approve: bool = False
 
 
+class UserUpdate(BaseModel):
+    """Model for updating user information"""
+    email: Optional[str] = None
+    full_name: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_admin: Optional[bool] = None
+
+
+class PasswordChange(BaseModel):
+    """Model for password change request"""
+    current_password: str
+    new_password: str
+
+    @validator('new_password')
+    def validate_new_password(cls, v):
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        if not any(c.isupper() for c in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not any(c.islower() for c in v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Password must contain at least one digit')
+        return v
+
+
+class UserResponse(BaseModel):
+    """Model for user response"""
+    id: int
+    email: str
+    full_name: Optional[str]
+    is_active: bool
+    is_admin: bool
+    created_at: str
+    last_login: Optional[str]
+
+
 # WebSocket connection manager
 class ConnectionManager:
     def __init__(self):
@@ -194,6 +232,30 @@ async def send_update(message_type: str, data: dict):
         "timestamp": datetime.now().isoformat()
     }
     await manager.broadcast(message)
+
+
+# Helper function to get current user with full details
+async def get_current_user_full(current_user: TokenData = Depends(get_current_user)):
+    """Get current user with full details from database"""
+    user = user_service.get_user_by_id(current_user.user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    return user
+
+
+# Helper function to check if user is admin
+async def require_admin(current_user: TokenData = Depends(get_current_user)):
+    """Dependency that requires the current user to be an admin"""
+    user = user_service.get_user_by_id(current_user.user_id)
+    if not user or not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return user
 
 
 # Root endpoint - serve the main HTML page
@@ -318,6 +380,230 @@ async def get_current_user_info(current_user: TokenData = Depends(get_current_us
         "email": current_user.email,
         "user_id": current_user.user_id
     }
+
+
+# API Endpoints - User Management
+
+@app.get("/api/users/me", response_model=UserResponse)
+async def get_my_profile(user = Depends(get_current_user_full)):
+    """Get current user's full profile"""
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        is_active=user.is_active,
+        is_admin=user.is_admin,
+        created_at=user.created_at.isoformat() if user.created_at else None,
+        last_login=user.last_login.isoformat() if user.last_login else None,
+    )
+
+
+@app.get("/api/users", response_model=List[UserResponse])
+@limiter.limit("30/minute")  # 30 requests per minute
+async def list_users(
+    request: Request,
+    active_only: bool = True,
+    limit: int = 100,
+    offset: int = 0,
+    admin_user = Depends(require_admin)
+):
+    """List all users (admin only)"""
+    try:
+        users = user_service.list_users(active_only=active_only, limit=limit, offset=offset)
+
+        return [
+            UserResponse(
+                id=user.id,
+                email=user.email,
+                full_name=user.full_name,
+                is_active=user.is_active,
+                is_admin=user.is_admin,
+                created_at=user.created_at.isoformat() if user.created_at else None,
+                last_login=user.last_login.isoformat() if user.last_login else None,
+            )
+            for user in users
+        ]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error listing users: {str(e)}"
+        )
+
+
+@app.get("/api/users/{user_id}", response_model=UserResponse)
+async def get_user(
+    user_id: int,
+    current_user: TokenData = Depends(get_current_user)
+):
+    """Get user by ID (users can get their own info, admins can get any user)"""
+    # Check if user is trying to access their own info or is admin
+    requesting_user = user_service.get_user_by_id(current_user.user_id)
+
+    if current_user.user_id != user_id and not requesting_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot access other users' information"
+        )
+
+    user = user_service.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        is_active=user.is_active,
+        is_admin=user.is_admin,
+        created_at=user.created_at.isoformat() if user.created_at else None,
+        last_login=user.last_login.isoformat() if user.last_login else None,
+    )
+
+
+@app.put("/api/users/{user_id}", response_model=UserResponse)
+async def update_user(
+    user_id: int,
+    user_update: UserUpdate,
+    current_user: TokenData = Depends(get_current_user)
+):
+    """Update user information"""
+    # Check if user is trying to update their own info or is admin
+    requesting_user = user_service.get_user_by_id(current_user.user_id)
+
+    if current_user.user_id != user_id and not requesting_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot update other users' information"
+        )
+
+    # Non-admin users cannot change admin status or active status
+    if not requesting_user.is_admin:
+        if user_update.is_admin is not None or user_update.is_active is not None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only admins can change admin or active status"
+            )
+
+    try:
+        # Build update dict from non-None values
+        update_data = {}
+        if user_update.email is not None:
+            update_data['email'] = user_update.email
+        if user_update.full_name is not None:
+            update_data['full_name'] = user_update.full_name
+        if user_update.is_active is not None:
+            update_data['is_active'] = user_update.is_active
+        if user_update.is_admin is not None:
+            update_data['is_admin'] = user_update.is_admin
+
+        updated_user = user_service.update_user(user_id, **update_data)
+
+        if not updated_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        return UserResponse(
+            id=updated_user.id,
+            email=updated_user.email,
+            full_name=updated_user.full_name,
+            is_active=updated_user.is_active,
+            is_admin=updated_user.is_admin,
+            created_at=updated_user.created_at.isoformat() if updated_user.created_at else None,
+            last_login=updated_user.last_login.isoformat() if updated_user.last_login else None,
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating user: {str(e)}"
+        )
+
+
+@app.delete("/api/users/{user_id}")
+async def delete_user(
+    user_id: int,
+    admin_user = Depends(require_admin)
+):
+    """Delete (deactivate) a user (admin only)"""
+    # Prevent admin from deleting themselves
+    if admin_user.id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own account"
+        )
+
+    try:
+        success = user_service.delete_user(user_id)
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        return {
+            "status": "success",
+            "message": "User deactivated successfully"
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting user: {str(e)}"
+        )
+
+
+@app.post("/api/users/change-password")
+async def change_password(
+    password_change: PasswordChange,
+    user = Depends(get_current_user_full)
+):
+    """Change current user's password"""
+    from src.auth import verify_password
+
+    # Verify current password
+    if not verify_password(password_change.current_password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect"
+        )
+
+    # Ensure new password is different
+    if password_change.current_password == password_change.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be different from current password"
+        )
+
+    try:
+        success = user_service.change_password(user.id, password_change.new_password)
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to change password"
+            )
+
+        return {
+            "status": "success",
+            "message": "Password changed successfully"
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error changing password: {str(e)}"
+        )
 
 
 # API Endpoints - Protected
