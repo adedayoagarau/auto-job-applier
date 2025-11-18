@@ -18,11 +18,13 @@ from fastapi import (
     BackgroundTasks,
     UploadFile,
     File,
+    Depends,
+    status,
 )
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 import uvicorn
 
 # Import our existing modules
@@ -31,6 +33,17 @@ from src.cv_parser import CVParser
 from src.form_filler import FormFiller
 from src.ai_assistant import AIAssistant
 from src.application_tracker import ApplicationTracker
+from src.auth import (
+    get_current_user,
+    create_access_token,
+    authenticate_user,
+    create_user,
+    UserLogin,
+    UserCreate,
+    Token,
+    TokenData,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+)
 import config
 
 # Initialize FastAPI app
@@ -73,11 +86,63 @@ class JobSearchRequest(BaseModel):
     keywords: Optional[List[str]] = None
     exclude_keywords: Optional[List[str]] = None
 
+    @validator('job_titles')
+    def validate_job_titles(cls, v):
+        if not v or len(v) == 0:
+            raise ValueError('At least one job title is required')
+        if len(v) > 10:
+            raise ValueError('Maximum 10 job titles allowed')
+        for title in v:
+            if not title or len(title.strip()) == 0:
+                raise ValueError('Job title cannot be empty')
+            if len(title) > 200:
+                raise ValueError('Job title too long (max 200 characters)')
+        return v
+
+    @validator('locations')
+    def validate_locations(cls, v):
+        if not v or len(v) == 0:
+            raise ValueError('At least one location is required')
+        if len(v) > 10:
+            raise ValueError('Maximum 10 locations allowed')
+        for loc in v:
+            if not loc or len(loc.strip()) == 0:
+                raise ValueError('Location cannot be empty')
+            if len(loc) > 200:
+                raise ValueError('Location too long (max 200 characters)')
+        return v
+
+    @validator('platforms')
+    def validate_platforms(cls, v):
+        if not v or len(v) == 0:
+            raise ValueError('At least one platform is required')
+        valid_platforms = ['indeed', 'linkedin', 'glassdoor', 'ziprecruiter']
+        for platform in v:
+            if platform.lower() not in valid_platforms:
+                raise ValueError(f'Invalid platform: {platform}. Valid platforms: {", ".join(valid_platforms)}')
+        return v
+
 
 class ApplicationConfig(BaseModel):
     auto_submit: bool = False
     max_applications: int = 20
     application_delay: int = 30
+
+    @validator('max_applications')
+    def validate_max_applications(cls, v):
+        if v < 1:
+            raise ValueError('Max applications must be at least 1')
+        if v > 100:
+            raise ValueError('Max applications cannot exceed 100')
+        return v
+
+    @validator('application_delay')
+    def validate_application_delay(cls, v):
+        if v < 5:
+            raise ValueError('Application delay must be at least 5 seconds')
+        if v > 300:
+            raise ValueError('Application delay cannot exceed 300 seconds')
+        return v
 
 
 class JobApplication(BaseModel):
@@ -165,10 +230,87 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
 
 
-# API Endpoints
+# API Endpoints - Authentication
+
+@app.post("/api/auth/register", response_model=Token, status_code=status.HTTP_201_CREATED)
+async def register(user: UserCreate):
+    """Register a new user"""
+    try:
+        new_user = create_user(
+            email=user.email,
+            password=user.password,
+            full_name=user.full_name
+        )
+
+        # Create access token
+        access_token = create_access_token(
+            data={"sub": new_user["email"], "user_id": new_user["id"]}
+        )
+
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        }
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error creating user"
+        )
+
+
+@app.post("/api/auth/login", response_model=Token)
+async def login(user: UserLogin):
+    """Login and get access token"""
+    try:
+        authenticated_user = authenticate_user(user.email, user.password)
+
+        if not authenticated_user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Create access token
+        access_token = create_access_token(
+            data={"sub": authenticated_user["email"], "user_id": authenticated_user["id"]}
+        )
+
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error during login"
+        )
+
+
+@app.get("/api/auth/me")
+async def get_current_user_info(current_user: TokenData = Depends(get_current_user)):
+    """Get current user information"""
+    return {
+        "email": current_user.email,
+        "user_id": current_user.user_id
+    }
+
+
+# API Endpoints - Protected
 
 @app.get("/api/config")
-async def get_config():
+async def get_config(current_user: TokenData = Depends(get_current_user)):
     """Get current configuration"""
     return {
         "job_titles": config.JOB_TITLES,
@@ -184,7 +326,10 @@ async def get_config():
 
 
 @app.post("/api/config")
-async def update_config(updates: dict):
+async def update_config(
+    updates: dict,
+    current_user: TokenData = Depends(get_current_user)
+):
     """Update configuration (in-memory only)"""
     try:
         for key, value in updates.items():
@@ -196,55 +341,74 @@ async def update_config(updates: dict):
 
 
 @app.get("/api/statistics")
-async def get_statistics():
+async def get_statistics(current_user: TokenData = Depends(get_current_user)):
     """Get application statistics"""
     try:
-        tracker = ApplicationTracker()
-        stats = tracker.get_statistics()
+        # Run in thread pool to avoid blocking event loop
+        def _get_stats():
+            tracker = ApplicationTracker()
+            return tracker.get_statistics()
+
+        stats = await asyncio.to_thread(_get_stats)
         return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/applications")
-async def get_applications(limit: int = 50, offset: int = 0):
+async def get_applications(
+    limit: int = 50,
+    offset: int = 0,
+    current_user: TokenData = Depends(get_current_user)
+):
     """Get list of applications"""
     try:
-        tracker = ApplicationTracker()
-        # Get applications from database
-        from src.application_tracker import Application
-        from sqlalchemy import desc
+        # Run in thread pool to avoid blocking event loop
+        def _get_applications():
+            tracker = ApplicationTracker()
+            # Get applications from database
+            from src.application_tracker import Application
+            from sqlalchemy import desc
 
-        session = tracker.Session()
-        applications = session.query(Application)\
-            .order_by(desc(Application.applied_at))\
-            .limit(limit)\
-            .offset(offset)\
-            .all()
+            session = tracker.Session()
+            try:
+                applications = session.query(Application)\
+                    .order_by(desc(Application.applied_at))\
+                    .limit(limit)\
+                    .offset(offset)\
+                    .all()
 
-        result = []
-        for app in applications:
-            result.append({
-                "id": app.id,
-                "job_title": app.job_title,
-                "company": app.company,
-                "location": app.location,
-                "platform": app.platform,
-                "job_url": app.job_url,
-                "status": app.status,
-                "match_score": app.match_score,
-                "applied_at": app.applied_at.isoformat() if app.applied_at else None,
-                "response_received": app.response_received,
-            })
+                result = []
+                for app in applications:
+                    result.append({
+                        "id": app.id,
+                        "job_title": app.job_title,
+                        "company": app.company,
+                        "location": app.location,
+                        "platform": app.platform,
+                        "job_url": app.job_url,
+                        "status": app.status,
+                        "match_score": app.match_score,
+                        "applied_at": app.applied_at.isoformat() if app.applied_at else None,
+                        "response_received": app.response_received,
+                    })
 
-        session.close()
+                return result
+            finally:
+                session.close()
+
+        result = await asyncio.to_thread(_get_applications)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/search")
-async def search_jobs(search_request: JobSearchRequest, background_tasks: BackgroundTasks):
+async def search_jobs(
+    search_request: JobSearchRequest,
+    background_tasks: BackgroundTasks,
+    current_user: TokenData = Depends(get_current_user)
+):
     """Search for jobs without applying"""
     global job_search_task
 
@@ -266,7 +430,8 @@ async def search_jobs(search_request: JobSearchRequest, background_tasks: Backgr
 @app.post("/api/apply")
 async def start_application_process(
     application_config: ApplicationConfig,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user: TokenData = Depends(get_current_user)
 ):
     """Start the automated application process"""
     global application_process_running
@@ -285,7 +450,7 @@ async def start_application_process(
 
 
 @app.post("/api/stop")
-async def stop_process():
+async def stop_process(current_user: TokenData = Depends(get_current_user)):
     """Stop the current process"""
     global application_process_running
     application_process_running = False
@@ -295,16 +460,55 @@ async def stop_process():
 
 
 @app.post("/api/upload-resume")
-async def upload_resume(file: UploadFile = File(...)):
+async def upload_resume(
+    file: UploadFile = File(...),
+    current_user: TokenData = Depends(get_current_user)
+):
     """Upload a resume file"""
     try:
+        # Security: Validate file type
+        allowed_extensions = {'.pdf', '.docx', '.doc', '.txt'}
+        file_ext = Path(file.filename).suffix.lower()
+
+        if file_ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file type. Allowed types: {', '.join(allowed_extensions)}"
+            )
+
+        # Security: Validate filename (prevent path traversal)
+        safe_filename = Path(file.filename).name  # Get just the filename without path
+        if '..' in safe_filename or '/' in safe_filename or '\\' in safe_filename:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid filename"
+            )
+
+        # Security: Limit file size to 10MB
+        MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+        content = await file.read()
+
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail="File too large. Maximum size is 10MB"
+            )
+
         # Save the file
         resume_dir = Path(__file__).parent / "data" / "resumes"
         resume_dir.mkdir(parents=True, exist_ok=True)
 
-        file_path = resume_dir / file.filename
+        # Use safe filename
+        file_path = resume_dir / safe_filename
+
+        # Ensure file path is within resume directory (additional security check)
+        if not str(file_path.resolve()).startswith(str(resume_dir.resolve())):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid file path"
+            )
+
         with open(file_path, "wb") as f:
-            content = await file.read()
             f.write(content)
 
         # Update config
@@ -320,30 +524,49 @@ async def upload_resume(file: UploadFile = File(...)):
             "file_path": str(file_path),
             "cv_data": cv_data
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Error uploading resume: {str(e)}")
 
 
 @app.get("/api/export")
-async def export_applications(format: str = "csv"):
+async def export_applications(
+    format: str = "csv",
+    current_user: TokenData = Depends(get_current_user)
+):
     """Export applications to CSV"""
     try:
-        tracker = ApplicationTracker()
-        export_path = Path(__file__).parent / "data" / "exports"
-        export_path.mkdir(parents=True, exist_ok=True)
+        # Validate format
+        if format.lower() != "csv":
+            raise HTTPException(
+                status_code=400,
+                detail="Only CSV format is currently supported"
+            )
 
-        filename = f"applications_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        file_path = export_path / filename
+        # Run in thread pool to avoid blocking event loop
+        def _export():
+            tracker = ApplicationTracker()
+            export_path = Path(__file__).parent / "data" / "exports"
+            export_path.mkdir(parents=True, exist_ok=True)
 
-        tracker.export_to_csv(str(file_path))
+            filename = f"applications_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            file_path = export_path / filename
+
+            tracker.export_to_csv(str(file_path))
+            return file_path, filename
+
+        file_path, filename = await asyncio.to_thread(_export)
 
         return FileResponse(
             path=file_path,
             filename=filename,
             media_type="text/csv"
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Error exporting applications: {str(e)}")
 
 
 # Background tasks
@@ -409,9 +632,19 @@ async def run_job_search(
         })
 
     except Exception as e:
+        error_message = f"Error during job search: {str(e)}"
+        print(error_message)
         await send_update("error", {
-            "message": f"Error during job search: {str(e)}"
+            "message": error_message
         })
+
+    finally:
+        # Cleanup resources
+        if 'tracker' in locals() and tracker:
+            try:
+                tracker.session.close()
+            except Exception as e:
+                print(f"Error closing tracker session: {str(e)}")
 
 
 async def run_application_process(
@@ -551,11 +784,25 @@ async def run_application_process(
         })
 
     except Exception as e:
+        error_message = f"Error during application process: {str(e)}"
+        print(error_message)
         await send_update("error", {
-            "message": f"Error during application process: {str(e)}"
+            "message": error_message
         })
     finally:
         application_process_running = False
+        # Cleanup resources
+        if 'tracker' in locals() and tracker:
+            try:
+                tracker.session.close()
+            except Exception as e:
+                print(f"Error closing tracker session: {str(e)}")
+        if 'scraper' in locals() and scraper:
+            try:
+                # Scraper cleanup happens in context manager, but just in case
+                pass
+            except Exception as e:
+                print(f"Error cleaning up scraper: {str(e)}")
 
 
 # Health check endpoint

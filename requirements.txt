@@ -32,3 +32,11 @@ fastapi>=0.104.0
 uvicorn>=0.24.0
 python-multipart>=0.0.6
 websockets>=12.0
+
+# Authentication
+python-jose[cryptography]>=3.3.0
+passlib[argon2]>=1.7.4
+email-validator>=2.1.0
+
+# Database migrations
+alembic>=1.13.0
