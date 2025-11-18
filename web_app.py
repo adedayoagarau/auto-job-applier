@@ -20,11 +20,15 @@ from fastapi import (
     File,
     Depends,
     status,
+    Request,
 )
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, validator
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import uvicorn
 
 # Import our existing modules
@@ -46,12 +50,19 @@ from src.auth import (
 )
 import config
 
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+
 # Initialize FastAPI app
 app = FastAPI(
     title="AutoJobApplier",
     description="Automated job application system with AI assistance",
     version="1.0.0"
 )
+
+# Add rate limiter to app
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Enable CORS - restrict to localhost origins only for security
 app.add_middleware(
@@ -233,7 +244,8 @@ async def websocket_endpoint(websocket: WebSocket):
 # API Endpoints - Authentication
 
 @app.post("/api/auth/register", response_model=Token, status_code=status.HTTP_201_CREATED)
-async def register(user: UserCreate):
+@limiter.limit("5/hour")  # 5 registrations per hour per IP
+async def register(request: Request, user: UserCreate):
     """Register a new user"""
     try:
         new_user = create_user(
@@ -266,7 +278,8 @@ async def register(user: UserCreate):
 
 
 @app.post("/api/auth/login", response_model=Token)
-async def login(user: UserLogin):
+@limiter.limit("10/minute")  # 10 login attempts per minute per IP
+async def login(request: Request, user: UserLogin):
     """Login and get access token"""
     try:
         authenticated_user = authenticate_user(user.email, user.password)
@@ -404,7 +417,9 @@ async def get_applications(
 
 
 @app.post("/api/search")
+@limiter.limit("20/hour")  # 20 job searches per hour per IP
 async def search_jobs(
+    request: Request,
     search_request: JobSearchRequest,
     background_tasks: BackgroundTasks,
     current_user: TokenData = Depends(get_current_user)
@@ -428,7 +443,9 @@ async def search_jobs(
 
 
 @app.post("/api/apply")
+@limiter.limit("10/hour")  # 10 application processes per hour per IP
 async def start_application_process(
+    request: Request,
     application_config: ApplicationConfig,
     background_tasks: BackgroundTasks,
     current_user: TokenData = Depends(get_current_user)
@@ -460,7 +477,9 @@ async def stop_process(current_user: TokenData = Depends(get_current_user)):
 
 
 @app.post("/api/upload-resume")
+@limiter.limit("10/hour")  # 10 file uploads per hour per IP
 async def upload_resume(
+    request: Request,
     file: UploadFile = File(...),
     current_user: TokenData = Depends(get_current_user)
 ):

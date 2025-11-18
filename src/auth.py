@@ -3,7 +3,6 @@ Authentication module for AutoJobApplier
 Provides JWT-based authentication for API endpoints
 """
 
-import os
 from datetime import datetime, timedelta
 from typing import Optional
 from passlib.context import CryptContext
@@ -12,10 +11,19 @@ from pydantic import BaseModel, EmailStr, validator
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-# Security configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this-in-production-use-env-var")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+# Import environment configuration
+try:
+    from src.env_config import env_config
+    SECRET_KEY = env_config.jwt_secret_key
+    ALGORITHM = env_config.jwt_algorithm
+    ACCESS_TOKEN_EXPIRE_MINUTES = env_config.access_token_expire_minutes
+except ImportError:
+    # Fallback if env_config not available
+    import os
+    SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this-in-production-use-env-var")
+    ALGORITHM = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 # Password hashing (using argon2 instead of bcrypt for better compatibility)
